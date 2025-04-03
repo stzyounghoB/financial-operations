@@ -39,7 +39,6 @@ class UnusedAMIChecker(InfraChecker[UnusedAMIInfo]):
                 all_amis = ami_response.get("Images", [])
                 
                 if not all_amis:
-                    print(f"리전 {self.region}에서 소유한 AMI가 없습니다.")
                     return []
                 
                 # 모든 EC2 인스턴스 정보 조회
@@ -50,26 +49,26 @@ class UnusedAMIChecker(InfraChecker[UnusedAMIInfo]):
                 used_ami_ids = set()
                 for reservation in reservations:
                     for instance in reservation.get("Instances", []):
-                        ami_id = instance.get("ImageId")
-                        if ami_id:
-                            used_ami_ids.add(ami_id)
+                        image_id = instance.get("ImageId")
+                        if image_id:
+                            used_ami_ids.add(image_id)
                 
                 # 사용되지 않는 AMI 정보 생성
                 unused_amis = []
                 for ami in all_amis:
-                    ami_id = ami["ImageId"]
+                    ami_id = ami.get("ImageId")
                     if ami_id not in used_ami_ids:
-                        # AMI와 연결된 스냅샷 ID 추출
+                        # 스냅샷 ID 수집
                         snapshot_ids = []
-                        for block_device in ami.get("BlockDeviceMappings", []):
-                            if "Ebs" in block_device and "SnapshotId" in block_device["Ebs"]:
-                                snapshot_ids.append(block_device["Ebs"]["SnapshotId"])
+                        for mapping in ami.get("BlockDeviceMappings", []):
+                            if "Ebs" in mapping and "SnapshotId" in mapping["Ebs"]:
+                                snapshot_ids.append(mapping["Ebs"]["SnapshotId"])
                         
                         unused_amis.append({
                             "id": ami_id,
                             "name": ami.get("Name", "이름 없음"),
                             "creation_date": ami.get("CreationDate", ""),
-                            "state": ami.get("State", "unknown"),
+                            "state": ami.get("State", ""),
                             "description": ami.get("Description", ""),
                             "is_public": ami.get("Public", False),
                             "region": self.region,
@@ -99,19 +98,19 @@ class UnusedAMIChecker(InfraChecker[UnusedAMIInfo]):
                 images = ami_response.get("Images", [])
                 
                 if not images:
-                    return {"success": False, "message": f"AMI {ami_id}를 찾을 수 없습니다."}
+                    return {"success": False, "message": f"AMI {ami_id}를 찾을 수 없습니다.", "ami_id": ami_id}
                 
                 # 스냅샷 ID 추출
                 snapshot_ids = []
                 for image in images:
-                    for block_device in image.get("BlockDeviceMappings", []):
-                        if "Ebs" in block_device and "SnapshotId" in block_device["Ebs"]:
-                            snapshot_ids.append(block_device["Ebs"]["SnapshotId"])
+                    for mapping in image.get("BlockDeviceMappings", []):
+                        if "Ebs" in mapping and "SnapshotId" in mapping["Ebs"]:
+                            snapshot_ids.append(mapping["Ebs"]["SnapshotId"])
                 
                 # AMI 등록 취소
                 await ec2.deregister_image(ImageId=ami_id)
                 
-                # 연결된 스냅샷 삭제 (선택 사항)
+                # 연결된 스냅샷도 삭제
                 deleted_snapshots = []
                 if delete_snapshots and snapshot_ids:
                     for snapshot_id in snapshot_ids:
@@ -122,14 +121,14 @@ class UnusedAMIChecker(InfraChecker[UnusedAMIInfo]):
                             print(f"스냅샷 {snapshot_id} 삭제 실패: {e}")
                 
                 return {
-                    "success": True,
+                    "success": True, 
+                    "message": f"AMI {ami_id} 삭제 완료" + 
+                              (f", 연결된 스냅샷 {len(deleted_snapshots)}개 삭제됨" if deleted_snapshots else ""),
                     "ami_id": ami_id,
-                    "deleted_snapshots": deleted_snapshots,
-                    "message": f"AMI {ami_id} 삭제 완료" + (f", {len(deleted_snapshots)}개 스냅샷 삭제 완료" if deleted_snapshots else "")
+                    "deleted_snapshots": deleted_snapshots
                 }
-                
             except Exception as e:
-                return {"success": False, "message": f"AMI {ami_id} 삭제 실패: {e}"}
+                return {"success": False, "message": f"AMI {ami_id} 삭제 실패: {e}", "ami_id": ami_id}
     
     async def batch_delete_amis(self, ami_ids: List[str], delete_snapshots: bool = False) -> List[Dict[str, Any]]:
         """
