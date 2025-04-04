@@ -205,7 +205,7 @@ class Menu:
                 for item in results:
                     print(item)
             else:
-                from utils import save_to_file
+                from .utils import save_to_file
                 success = await save_to_file(results, file_path, format_type)
                 if success:
                     print(f"\n총 {len(results)}개 항목이 {file_path} 파일로 저장되었습니다.")
@@ -317,7 +317,7 @@ class Menu:
                 print(f"WCU 사용량: 평균 {item['consumed_wcu_avg']:.2f}, 최소 {item['consumed_wcu_min']:.2f}, 최대 {item['consumed_wcu_max']:.2f}")
                 print(f"RCU 사용량: 평균 {item['consumed_rcu_avg']:.2f}, 최소 {item['consumed_rcu_min']:.2f}, 최대 {item['consumed_rcu_max']:.2f}")
         else:
-            from utils import save_to_file
+            from .utils import save_to_file
             success = await save_to_file(results, file_path, format_type)
             if success:
                 print(f"\n총 {len(results)}개 항목이 {file_path} 파일로 저장되었습니다.")
