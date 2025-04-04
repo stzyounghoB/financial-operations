@@ -12,15 +12,28 @@ AWS 리소스를 분석하고 비용 최적화 기회를 식별하는 도구입�
 
 ## 설치 방법
 
-### 방법 1 : GitHub에서 직접 설치(권장)
+### 방법 1: GitHub에서 직접 설치(권장)
+
+#### 최신 버전 설치
 ```bash
-# pip를 사용하여 GitHub 저장소에서 직접 설치
+# 항상 최신 버전 설치
 pip install git+https://github.com/Cha-Young-Ho/financial-operations.git
 ```
 
-### 방법 2 : GitHub 클론 후 실행
+#### 특정 버전 설치
 ```bash
+# 특정 태그 버전 설치 (예: v0.1.2)
+pip install git+https://github.com/Cha-Young-Ho/financial-operations.git@v0.1.2
+```
 
+#### 업그레이드
+```bash
+# 이미 설치된 경우 최신 버전으로 업그레이드
+pip install --upgrade git+https://github.com/Cha-Young-Ho/financial-operations.git
+```
+
+### 방법 2: GitHub 클론 후 실행
+```bash
 # 1. 저장소 클론
 git clone https://github.com/Cha-Young-Ho/financial-operations.git
 cd financial-operations
@@ -32,8 +45,20 @@ source venv/bin/activate
 
 # 3. 의존성 설치
 pip install -e .
+```
 
-python3 main.py
+## 사용 가능한 버전
+
+현재 사용 가능한 버전 태그:
+- v0.1.0: 초기 릴리스
+  - EBS Snapshot
+  - EBS Volume
+  - DynamoDB Capacity Unit
+  - AMI
+
+최신 버전 태그 확인:
+```bash
+git ls-remote --tags https://github.com/Cha-Young-Ho/financial-operations.git
 ```
 
 ## 실행 방법
