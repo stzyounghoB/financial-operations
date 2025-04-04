@@ -4,3 +4,7 @@ __pycache__
 *.csv
 *.log
 *.tsv
+json/
+csv/
+tsv/
+all/

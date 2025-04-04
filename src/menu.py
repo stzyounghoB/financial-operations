@@ -124,7 +124,9 @@ class Menu:
         if format_type != "console":
             from datetime import datetime
             default_name = f"aws_infra_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{format_type}"
-            default_path = os.path.join(os.getcwd(), default_name)
+            directory = os.path.join(os.getcwd(), format_type)
+            os.makedirs(directory, exist_ok=True)  # Ensure the directory exists
+            default_path = os.path.join(directory, default_name)
             
             file_path = input(f"\n저장할 파일 경로를 입력하세요 (기본값: {default_path}): ").strip()
             if not file_path:
