@@ -1,8 +1,8 @@
 # menu.py
 import os
 from typing import List, Tuple, Optional, Union
-from unused_ami_checker import UnusedAMIChecker
-from dynamo_cu_checker import DynamoCUChecker
+from .unused_ami_checker import UnusedAMIChecker
+from .dynamo_cu_checker import DynamoCUChecker
 
 class Menu:
     """AWS 인프라 체커 메뉴 인터페이스"""

@@ -3,7 +3,7 @@ import asyncio
 import datetime
 from typing import List, Dict, Any, Optional, Union, TypedDict, Tuple
 import aioboto3
-from infra_checker import InfraChecker
+from .infra_checker import InfraChecker
 
 
 class DynamoCUInfo(TypedDict):

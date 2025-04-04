@@ -2,7 +2,7 @@
 from typing import List, Dict, Any, Optional, Union, TypedDict, Set
 import aioboto3
 import asyncio
-from infra_checker import InfraChecker
+from .infra_checker import InfraChecker
 
 
 class UnusedAMIInfo(TypedDict):

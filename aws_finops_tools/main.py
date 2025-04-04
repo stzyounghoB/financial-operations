@@ -1,14 +1,14 @@
 # main.py
 import asyncio
 from typing import List, Dict, Any, Type, Optional, Union
-from ebs_snapshot_checker import EBSSnapshotChecker
-from ebs_volume_checker import EBSVolumeChecker
-from ami_checker import AMIChecker
-from unused_ami_checker import UnusedAMIChecker
-from dynamo_cu_checker import DynamoCUChecker  # 추가
-from utils import save_to_file
-from menu import Menu
-from infra_checker import InfraChecker
+from .ebs_snapshot_checker import EBSSnapshotChecker
+from .ebs_volume_checker import EBSVolumeChecker
+from .ami_checker import AMIChecker
+from .unused_ami_checker import UnusedAMIChecker
+from .dynamo_cu_checker import DynamoCUChecker
+from .utils import save_to_file
+from .menu import Menu
+from .infra_checker import InfraChecker
 
 
 async def run_all_checks(

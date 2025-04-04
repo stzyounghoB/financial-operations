@@ -2,7 +2,7 @@
 from typing import List, Dict, Any, Optional, Union, TypedDict
 import asyncio
 import aioboto3
-from infra_checker import InfraChecker
+from .infra_checker import InfraChecker
 
 class SnapshotInfo(TypedDict):
     """EBS 스냅샷 정보 타입 정의"""

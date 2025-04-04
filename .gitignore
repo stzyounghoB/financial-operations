@@ -8,3 +8,4 @@ json/
 csv/
 tsv/
 all/
+*.egg-info

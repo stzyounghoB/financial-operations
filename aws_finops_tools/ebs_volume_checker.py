@@ -1,7 +1,7 @@
 # ebs_volume_checker.py
 from typing import List, Dict, Any, Optional, Union, TypedDict
 import aioboto3
-from infra_checker import InfraChecker
+from .infra_checker import InfraChecker
 
 
 class VolumeInfo(TypedDict):
