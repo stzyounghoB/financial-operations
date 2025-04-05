@@ -1,33 +1,30 @@
-# menu.py
 import os
-from typing import List, Tuple, Optional, Union
-from .unused_ami_checker import UnusedAMIChecker
-from .dynamo_cu_checker import DynamoCUChecker
+from datetime import datetime
+from typing import List, Dict, Any, Optional, Union, Tuple, Type
+import asyncio
+
+from .interfaces.service_interface import ServiceInterface
+from .service.ebs.volume.handler import VolumeHandler
+from .service.ebs.snapshot.handler import SnapshotHandler
+from .service.ami.handler import AMIHandler
+from .service.dynamodb.cu.handler import DynamoCUHandler
+from .output.output_factory import OutputFactory
+
 
 class Menu:
-    """AWS 인프라 체커 메뉴 인터페이스"""
+    """AWS infrastructure checker menu interface"""
     
-    # 리전 정보
+    # Region information
     REGIONS = {
         "1": "ap-northeast-1",
         "2": "ap-northeast-2",
         "3": "us-east-1",
         "4": "us-east-2",
         "5": "us-west-1",
-        "6": "모두 다"
+        "6": "All regions"
     }
     
-    # 서비스 정보
-    SERVICES = {
-        "1": "EBS 스냅샷",
-        "2": "EBS 볼륨",
-        "3": "AMI",
-        "4": "사용되지 않는 AMI (삭제 기능)",
-        "5": "DynamoDB CU 사용량",  # DynamoDB CU 옵션 추가
-        "6": "ALL"  # 번호 업데이트
-    }
-    
-    # 출력 형식 정보
+    # Output format information
     FORMATS = {
         "1": "json",
         "2": "csv",
@@ -35,44 +32,60 @@ class Menu:
         "4": "console"
     }
     
-    def pick_region(self) -> List[str]:
-        """
-        사용할 AWS 리전 선택
-        
-        Returns:
-            List[str]: 선택한 리전 목록
-        """
-        print("\n어떤 리전을 선택하시겠습니까?")
-        for key, region in self.REGIONS.items():
-            print(f"{key}. {region}")
-        
-        region_choice = input("번호를 입력하세요: ")
-        
-        if region_choice == "6":
-            # "모두 다" 제외하고 모든 리전 선택
-            return list(value for key, value in self.REGIONS.items() if key != "6")
-        elif region_choice in self.REGIONS:
-            return [self.REGIONS[region_choice]]
-        else:
-            print("잘못된 입력입니다. 기본값(ap-northeast-2)을 사용합니다.")
-            return ["ap-northeast-2"]
+    # Main service menu
+    MAIN_SERVICES = {
+        "1": "EBS",
+        "2": "AMI",
+        "3": "DynamoDB",
+        "4": "Exit"
+    }
+    
+    # EBS sub-menu
+    EBS_MENU = {
+        "1": "Volumes",
+        "2": "Snapshots",
+        "3": "Back"
+    }
+    
+    # EBS volume sub-menu
+    VOLUME_MENU = {
+        "1": "All volumes",
+        "2": "Unused volumes",
+        "3": "Back"
+    }
+    
+    # AMI sub-menu
+    AMI_MENU = {
+        "1": "All AMIs",
+        "2": "Unused AMIs",
+        "3": "Back"
+    }
+    
+    # DynamoDB sub-menu
+    DYNAMODB_MENU = {
+        "1": "CU usage (1 month)",
+        "2": "CU usage (3 months)",
+        "3": "CU usage (6 months)",
+        "4": "Back"
+    }
     
     def pick_aws_profile(self) -> Optional[Union[str, Tuple[str, str]]]:
         """
-        AWS 세션 정보 선택
+        Select AWS session information
         
         Returns:
-            Optional[Union[str, Tuple[str, str]]]: 세션 정보
+            Optional[Union[str, Tuple[str, str]]]: Session information
         """
-        print("\nAWS 세션을 선택하세요.")
-        print("1. 기본 프로필\n2. 입력 프로필\n3. 키 입력")
+        print("\nAWS FinOps Program")
+        print("Please select an AWS profile:")
+        print("1. Default profile\n2. Named profile\n3. Key input")
         
-        session_choice = input("번호를 입력하세요: ")
+        session_choice = input("Enter a number: ")
         
         if session_choice == "1":
-            return None  # 기본 프로필 사용
+            return None  # Use default profile
         elif session_choice == "2":
-            profile_name = input("사용할 AWS 프로필 이름을 입력하세요: ")
+            profile_name = input("Enter AWS profile name: ")
             return profile_name if profile_name.strip() else None
         elif session_choice == "3":
             access_key = input("AWS Access Key: ")
@@ -80,143 +93,324 @@ class Menu:
             if access_key.strip() and secret_key.strip():
                 return (access_key, secret_key)
             else:
-                print("키 정보가 올바르지 않습니다. 기본 프로필을 사용합니다.")
+                print("Invalid key information. Using default profile.")
                 return None
         else:
-            print("잘못된 입력입니다. 기본 프로필을 사용합니다.")
+            print("Invalid input. Using default profile.")
             return None
     
-    def pick_service(self) -> str:
+    def pick_region(self) -> List[str]:
         """
-        확인할 AWS 서비스 선택
+        Select AWS region(s) to use
         
         Returns:
-            str: 선택한 서비스 번호
+            List[str]: Selected region list
         """
-        print("\nAWS 인프라 환경 체크 프로세스입니다. 확인할 서비스를 골라주세요.")
-        for key, service in self.SERVICES.items():
-            print(f"{key}. {service}")
+        print("\nPlease select a region:")
+        for key, region in self.REGIONS.items():
+            print(f"{key}. {region}")
         
-        choice = input("번호를 입력하세요: ")
+        region_choice = input("Enter a number: ")
         
-        if choice in self.SERVICES:
-            return choice
+        if region_choice == "6":
+            # Select all regions except "All regions"
+            return list(value for key, value in self.REGIONS.items() if key != "6")
+        elif region_choice in self.REGIONS:
+            return [self.REGIONS[region_choice]]
         else:
-            print("잘못된 입력입니다. 기본값(ALL)을 사용합니다.")
-            return "6"  # ALL 옵션이 6번으로 변경됨
+            print("Invalid input. Using default region (ap-northeast-2).")
+            return ["ap-northeast-2"]
     
     def pick_output_type(self) -> Tuple[Optional[str], str]:
         """
-        출력 형식 및 파일 경로 선택
+        Select output format and file path
         
         Returns:
-            Tuple[Optional[str], str]: (파일 경로, 출력 형식)
+            Tuple[Optional[str], str]: (file path, output format)
         """
-        print("\n어떤 형식으로 데이터를 저장하시겠습니까?")
+        print("\nHow would you like to save the data?")
         for key, fmt in self.FORMATS.items():
             print(f"{key}. {fmt.upper()}")
         
-        format_choice = input("번호를 입력하세요: ")
+        format_choice = input("Enter a number: ")
         format_type = self.FORMATS.get(format_choice, "console")
         
         file_path = None
         
         if format_type != "console":
-            from datetime import datetime
             default_name = f"aws_infra_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{format_type}"
             directory = os.path.join(os.getcwd(), format_type)
-            os.makedirs(directory, exist_ok=True)  # Ensure the directory exists
+            os.makedirs(directory, exist_ok=True)
             default_path = os.path.join(directory, default_name)
             
-            file_path = input(f"\n저장할 파일 경로를 입력하세요 (기본값: {default_path}): ").strip()
+            file_path = input(f"\nEnter file path (default: {default_path}): ").strip()
             if not file_path:
                 file_path = default_path
             
-            # 확장자 확인 및 수정
+            # Check extension
             if not file_path.endswith(f".{format_type}"):
                 file_path = f"{file_path}.{format_type}"
         
         return file_path, format_type
     
-    def pick_dynamo_months(self) -> int:
+    async def main_menu(self, session: Optional[Union[str, tuple[str, str]]], regions: List[str]) -> None:
         """
-        DynamoDB 지표 조회 기간(월) 선택
-        
-        Returns:
-            int: 조회 개월 수
-        """
-        print("\nDynamoDB 지표를 몇 개월치 조회하시겠습니까?")
-        print("1. 1개월 (기본)")
-        print("2. 3개월")
-        print("3. 6개월")
-        print("4. 12개월")
-        
-        choice = input("번호를 입력하세요: ").strip()
-        
-        months_map = {
-            "1": 1,
-            "2": 3,
-            "3": 6,
-            "4": 12
-        }
-        
-        return months_map.get(choice, 1)  # 기본값은 1개월
-    
-    async def handle_unused_ami(self, regions: List[str], session: Optional[Union[str, tuple[str, str]]]) -> None:
-        """
-        사용되지 않는 AMI 메뉴 처리
+        Display and handle main menu
         
         Args:
-            regions: 처리할 리전 목록
-            session: AWS 세션 정보
+            session: AWS session information
+            regions: Selected regions
         """
-        print("\n사용되지 않는 AMI 조회 중...")
+        while True:
+            print("\nSelect an infrastructure service to check:")
+            for key, service in self.MAIN_SERVICES.items():
+                print(f"{key}. {service}")
+            
+            choice = input("Enter a number: ")
+            
+            if choice == "1":  # EBS
+                await self.ebs_menu(session, regions)
+            elif choice == "2":  # AMI
+                await self.ami_menu(session, regions)
+            elif choice == "3":  # DynamoDB
+                await self.dynamodb_menu(session, regions)
+            elif choice == "4":  # Exit
+                print("Exiting program.")
+                break
+            else:
+                print("Invalid choice. Please try again.")
+    
+    async def ebs_menu(self, session: Optional[Union[str, tuple[str, str]]], regions: List[str]) -> None:
+        """
+        Display and handle EBS menu
+        
+        Args:
+            session: AWS session information
+            regions: Selected regions
+        """
+        while True:
+            print("\nEBS Services:")
+            for key, option in self.EBS_MENU.items():
+                print(f"{key}. {option}")
+            
+            choice = input("Enter a number: ")
+            
+            if choice == "1":  # Volumes
+                await self.volume_menu(session, regions)
+            elif choice == "2":  # Snapshots
+                await self.handle_snapshots(session, regions)
+            elif choice == "3":  # Back
+                return
+            else:
+                print("Invalid choice. Please try again.")
+    
+    async def volume_menu(self, session: Optional[Union[str, tuple[str, str]]], regions: List[str]) -> None:
+        """
+        Display and handle volume menu
+        
+        Args:
+            session: AWS session information
+            regions: Selected regions
+        """
+        while True:
+            print("\nEBS Volume Options:")
+            for key, option in self.VOLUME_MENU.items():
+                print(f"{key}. {option}")
+            
+            choice = input("Enter a number: ")
+            
+            if choice == "1":  # All volumes
+                await self.handle_volumes(session, regions, False)
+            elif choice == "2":  # Unused volumes
+                await self.handle_volumes(session, regions, True)
+            elif choice == "3":  # Back
+                return
+            else:
+                print("Invalid choice. Please try again.")
+    
+    async def ami_menu(self, session: Optional[Union[str, tuple[str, str]]], regions: List[str]) -> None:
+        """
+        Display and handle AMI menu
+        
+        Args:
+            session: AWS session information
+            regions: Selected regions
+        """
+        while True:
+            print("\nAMI Options:")
+            for key, option in self.AMI_MENU.items():
+                print(f"{key}. {option}")
+            
+            choice = input("Enter a number: ")
+            
+            if choice == "1":  # All AMIs
+                await self.handle_amis(session, regions, False)
+            elif choice == "2":  # Unused AMIs
+                await self.handle_unused_amis(session, regions)
+            elif choice == "3":  # Back
+                return
+            else:
+                print("Invalid choice. Please try again.")
+    
+    async def dynamodb_menu(self, session: Optional[Union[str, tuple[str, str]]], regions: List[str]) -> None:
+        """
+        Display and handle DynamoDB menu
+        
+        Args:
+            session: AWS session information
+            regions: Selected regions
+        """
+        while True:
+            print("\nDynamoDB Options:")
+            for key, option in self.DYNAMODB_MENU.items():
+                print(f"{key}. {option}")
+            
+            choice = input("Enter a number: ")
+            
+            if choice == "1":  # 1 month
+                await self.handle_dynamo_cu(session, regions, 1)
+            elif choice == "2":  # 3 months
+                await self.handle_dynamo_cu(session, regions, 3)
+            elif choice == "3":  # 6 months
+                await self.handle_dynamo_cu(session, regions, 6)
+            elif choice == "4":  # Back
+                return
+            else:
+                print("Invalid choice. Please try again.")
+    
+    async def handle_volumes(self, session: Optional[Union[str, tuple[str, str]]], regions: List[str], unused_only: bool) -> None:
+        """
+        Handle EBS volume operations
+        
+        Args:
+            session: AWS session information
+            regions: Selected regions
+            unused_only: Whether to show only unused volumes
+        """
+        print(f"\nFetching {'unused ' if unused_only else ''}EBS volumes from {len(regions)} region(s)...")
         results = []
         
-        # 각 리전에서 사용되지 않는 AMI 조회
         for region in regions:
-            checker = UnusedAMIChecker(region, session)
-            unused_amis = await checker.fetch_data()
+            handler = VolumeHandler(region, session)
+            if unused_only:
+                volumes = await handler.fetch_unused_volumes()
+            else:
+                volumes = await handler.fetch_data()
+            results.extend(volumes)
+        
+        if not results:
+            print(f"No {'unused ' if unused_only else ''}EBS volumes found.")
+            return
+        
+        # Output
+        print(f"\nFound {len(results)} {'unused ' if unused_only else ''}EBS volumes.")
+        file_path, format_type = self.pick_output_type()
+        
+        output_handler = OutputFactory.get_handler(format_type)
+        await output_handler.output(results, file_path)
+    
+    async def handle_snapshots(self, session: Optional[Union[str, tuple[str, str]]], regions: List[str]) -> None:
+        """
+        Handle EBS snapshot operations
+        
+        Args:
+            session: AWS session information
+            regions: Selected regions
+        """
+        print(f"\nFetching EBS snapshots from {len(regions)} region(s)...")
+        results = []
+        
+        for region in regions:
+            handler = SnapshotHandler(region, session)
+            snapshots = await handler.fetch_data()
+            results.extend(snapshots)
+        
+        if not results:
+            print("No EBS snapshots found.")
+            return
+        
+        # Output
+        print(f"\nFound {len(results)} EBS snapshots.")
+        file_path, format_type = self.pick_output_type()
+        
+        output_handler = OutputFactory.get_handler(format_type)
+        await output_handler.output(results, file_path)
+    
+    async def handle_amis(self, session: Optional[Union[str, tuple[str, str]]], regions: List[str], unused_only: bool) -> None:
+        """
+        Handle AMI operations
+        
+        Args:
+            session: AWS session information
+            regions: Selected regions
+            unused_only: Whether to show only unused AMIs
+        """
+        print(f"\nFetching {'unused ' if unused_only else ''}AMIs from {len(regions)} region(s)...")
+        results = []
+        
+        for region in regions:
+            handler = AMIHandler(region, session)
+            amis = await handler.fetch_data()
+            results.extend(amis)
+        
+        if not results:
+            print(f"No {'unused ' if unused_only else ''}AMIs found.")
+            return
+        
+        # Output
+        print(f"\nFound {len(results)} {'unused ' if unused_only else ''}AMIs.")
+        file_path, format_type = self.pick_output_type()
+        
+        output_handler = OutputFactory.get_handler(format_type)
+        await output_handler.output(results, file_path)
+    
+    async def handle_unused_amis(self, session: Optional[Union[str, tuple[str, str]]], regions: List[str]) -> None:
+        """
+        Handle unused AMI operations
+        
+        Args:
+            session: AWS session information
+            regions: Selected regions
+        """
+        print("\nFetching unused AMIs...")
+        results = []
+        
+        # Fetch unused AMIs from each region
+        for region in regions:
+            handler = AMIHandler(region, session)
+            unused_amis = await handler.fetch_unused_amis()
             results.extend(unused_amis)
         
         if not results:
-            print("사용되지 않는 AMI가 없습니다.")
+            print("No unused AMIs found.")
             return
         
-        # 결과 출력
-        print(f"\n사용되지 않는 AMI {len(results)}개 발견:")
+        # Display results
+        print(f"\nFound {len(results)} unused AMIs:")
         for i, ami in enumerate(results, 1):
-            print(f"{i}. ID: {ami['id']}, 이름: {ami['name']}, 리전: {ami['region']}, " +
-                  f"생성일: {ami['creation_date']}, 연결 스냅샷: {len(ami['snapshot_ids'])}개")
+            print(f"{i}. ID: {ami['id']}, Name: {ami['name']}, Region: {ami['region']}, " +
+                  f"Created: {ami['creation_date']}, Snapshots: {len(ami['snapshot_ids'])}")
         
-        # 작업 선택
-        print("\n사용하지 않는 AMI에 대한 작업을 선택해주세요.")
-        print("1. 삭제")
-        print("2. 출력")
-        action_choice = input("번호를 입력하세요: ").strip()
+        # Ask for action
+        print("\nSelect an action:")
+        print("1. Delete\n2. Output")
+        action_choice = input("Enter a number: ").strip()
         
         if action_choice == "2":
-            # 출력 형식 선택
+            # Select output format
             file_path, format_type = self.pick_output_type()
             
-            # 결과 출력 또는 저장
-            if format_type == "console":
-                print(f"\n결과 항목 수: {len(results)}")
-                for item in results:
-                    print(item)
-            else:
-                from .utils import save_to_file
-                success = await save_to_file(results, file_path, format_type)
-                if success:
-                    print(f"\n총 {len(results)}개 항목이 {file_path} 파일로 저장되었습니다.")
+            # Output results
+            output_handler = OutputFactory.get_handler(format_type)
+            await output_handler.output(results, file_path)
             return
         
         if action_choice != "1":
-            print("작업을 취소합니다.")
+            print("Operation cancelled.")
             return
         
-        # 삭제할 AMI 선택
-        selection = input("\n삭제할 AMI 번호를 선택하세요 (쉼표로 구분, 'all'은 모두 선택): ").strip().lower()
+        # Select AMIs to delete
+        selection = input("\nSelect AMI numbers to delete (comma-separated, 'all' for all): ").strip().lower()
         ami_to_delete = []
         
         if selection == 'all':
@@ -228,96 +422,81 @@ class Menu:
                     if 0 <= idx < len(results):
                         ami_to_delete.append((results[idx]['id'], results[idx]['region']))
                     else:
-                        print(f"잘못된 인덱스: {idx + 1}")
+                        print(f"Invalid index: {idx + 1}")
             except ValueError:
-                print("잘못된 입력입니다.")
+                print("Invalid input.")
                 return
         
         if not ami_to_delete:
-            print("선택된 AMI가 없습니다.")
+            print("No AMIs selected.")
             return
         
-        # 스냅샷 삭제 여부 확인
-        delete_snapshots = input("AMI와 연결된 스냅샷도 함께 삭제하시겠습니까? (y/n): ").strip().lower() == 'y'
+        # Confirm snapshot deletion
+        delete_snapshots = input("Delete associated snapshots too? (y/n): ").strip().lower() == 'y'
         
-        # 리전별로 그룹화하여 삭제
+        # Group by region for deletion
         region_ami_map = {}
         for ami_id, region in ami_to_delete:
             if region not in region_ami_map:
                 region_ami_map[region] = []
             region_ami_map[region].append(ami_id)
         
-        # 각 리전에서 AMI 삭제 실행
+        # Delete AMIs in each region
         delete_results = []
         for region, ami_ids in region_ami_map.items():
-            checker = UnusedAMIChecker(region, session)
-            results = await checker.batch_delete_amis(ami_ids, delete_snapshots)
+            handler = AMIHandler(region, session)
+            results = await handler.batch_delete_amis(ami_ids, delete_snapshots)
             delete_results.extend(results)
         
-        # 삭제 결과 출력
+        # Display deletion results
         success_count = sum(1 for result in delete_results if result.get('success', False))
-        print(f"\nAMI 삭제 완료: {success_count}/{len(delete_results)}개 성공")
+        print(f"\nAMI deletion complete: {success_count}/{len(delete_results)} successful")
         
         for result in delete_results:
             if result.get('success', False):
-                print(f"성공: {result.get('message', '')}")
+                print(f"Success: {result.get('message', '')}")
             else:
-                print(f"실패: {result.get('message', '')}")
+                print(f"Failed: {result.get('message', '')}")
     
-    async def handle_dynamo_cu(self, regions: List[str], session: Optional[Union[str, tuple[str, str]]]) -> None:
+    async def handle_dynamo_cu(self, session: Optional[Union[str, tuple[str, str]]], regions: List[str], months: int) -> None:
         """
-        DynamoDB CU 사용량 분석 및 결과 출력
+        Handle DynamoDB CU operations
         
         Args:
-            regions: 처리할 리전 목록
-            session: AWS 세션 정보
+            session: AWS session information
+            regions: Selected regions
+            months: Number of months for metrics
         """
-        # 조회 개월 수 선택
-        months = self.pick_dynamo_months()
-        
-        print(f"\nDynamoDB CU 사용량 분석 중... ({months}개월 기준)")
+        print(f"\nAnalyzing DynamoDB CU usage ({months} months)...")
         results = []
         
-        # 각 리전에서 DynamoDB 테이블 조회
+        # Fetch DynamoDB tables from each region
         for region in regions:
-            checker = DynamoCUChecker(region, session, months)
-            table_metrics = await checker.fetch_data()
+            handler = DynamoCUHandler(region, session, months)
+            table_metrics = await handler.fetch_data()
             results.extend(table_metrics)
         
         if not results:
-            print("분석할 DynamoDB 테이블이 없습니다.")
+            print("No DynamoDB tables to analyze.")
             return
         
-        # 결과 요약 출력
-        print(f"\nDynamoDB 테이블 {len(results)}개 분석 결과:")
-        print(f"조회 기간: 최근 {months}개월")
+        # Display summary
+        print(f"\nAnalyzed {len(results)} DynamoDB tables:")
+        print(f"Period: Last {months} month(s)")
         
-        # 낮은 활용률 테이블 찾기 (20% 미만)
+        # Find low utilization tables (below 20%)
         low_utilization = [t for t in results if t["billing_mode"] == "PROVISIONED" and 
                            (t["wcu_utilization_percent"] < 20 or t["rcu_utilization_percent"] < 20)]
         
         if low_utilization:
-            print(f"\n활용률이 낮은 테이블 ({len(low_utilization)}개):")
+            print(f"\nLow utilization tables ({len(low_utilization)}):")
             for table in low_utilization:
-                print(f"  - {table['table_name']} (리전: {table['region']})")
-                print(f"    WCU 사용률: {table['wcu_utilization_percent']}%, RCU 사용률: {table['rcu_utilization_percent']}%")
+                print(f"  - {table['table_name']} (Region: {table['region']})")
+                print(f"    WCU utilization: {table['wcu_utilization_percent']}%, RCU utilization: {table['rcu_utilization_percent']}%")
         
-        # 출력 형식 선택
+        # Select output format
         file_path, format_type = self.pick_output_type()
         
-        # 결과 출력 또는 저장
-        if format_type == "console":
-            print("\n상세 분석 결과:")
-            for item in results:
-                print(f"\n테이블: {item['table_name']} (리전: {item['region']})")
-                print(f"청구 모드: {item['billing_mode']}")
-                if item['billing_mode'] == 'PROVISIONED':
-                    print(f"프로비저닝: WCU {item['provisioned_wcu']}, RCU {item['provisioned_rcu']}")
-                    print(f"사용률: WCU {item['wcu_utilization_percent']}%, RCU {item['rcu_utilization_percent']}%")
-                print(f"WCU 사용량: 평균 {item['consumed_wcu_avg']:.2f}, 최소 {item['consumed_wcu_min']:.2f}, 최대 {item['consumed_wcu_max']:.2f}")
-                print(f"RCU 사용량: 평균 {item['consumed_rcu_avg']:.2f}, 최소 {item['consumed_rcu_min']:.2f}, 최대 {item['consumed_rcu_max']:.2f}")
-        else:
-            from .utils import save_to_file
-            success = await save_to_file(results, file_path, format_type)
-            if success:
-                print(f"\n총 {len(results)}개 항목이 {file_path} 파일로 저장되었습니다.")
+        # Output results
+        output_handler = OutputFactory.get_handler(format_type)
+        await output_handler.output(results, file_path)
