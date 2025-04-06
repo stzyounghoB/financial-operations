@@ -3,12 +3,12 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional, Union, Tuple, Type
 import asyncio
 
-from .interfaces.service_interface import ServiceInterface
-from .service.ebs.volume.handler import VolumeHandler
-from .service.ebs.snapshot.handler import SnapshotHandler
-from .service.ami.handler import AMIHandler
-from .service.dynamodb.cu.handler import DynamoCUHandler
-from .output.output_factory import OutputFactory
+from aws_finops_tools.interfaces.service_interface import ServiceInterface
+from aws_finops_tools.service.ebs.volume.handler import VolumeHandler
+from aws_finops_tools.service.ebs.snapshot.handler import SnapshotHandler
+from aws_finops_tools.service.ami.handler import AMIHandler
+from aws_finops_tools.service.dynamodb.cu.handler import DynamoCUHandler
+from aws_finops_tools.output.output_factory import OutputFactory
 
 
 class Menu:
