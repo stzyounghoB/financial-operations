@@ -1,37 +1,35 @@
 # main.py
 import asyncio
 import platform
+import sys
 from .menu import Menu
-from .menu import Menu
-# 버전 정보 업데이트
-__version__ = "0.1.2"  # setup.py와 동일한 버전으로 유지
+
+# 버전 정보 추가
+__version__ = "0.1.5"  # Current version
 
 async def main() -> None:
-    """Main program"""c def main() -> None:
-    # Create menu and get user selections"
-    menu = Menu()ion__}")
+    """Main program"""
+    # Show version information
+    print(f"AWS FinOps Tools v{__version__}")
     
-    # Get AWS profile get user selections
+    # Create menu and get user selections
+    menu = Menu()
+    
+    # Get AWS profile
     session = menu.pick_aws_profile()
     
-    # Get AWS regionse
+    # Get AWS regions
     regions = menu.pick_region()
-        
-    # Show main menuegions
-    await menu.main_menu(session, regions)egion()
+    
+    # Show main menu
+    await menu.main_menu(session, regions)
 
 def main_cli():
     """CLI entry point"""
-    # Fix for Windows event loop policy
-    if platform.system() == 'Windows':
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())""
-        # 버전 정보 확인 처리
-    # Run main programnd sys.argv[1] == "--version":
-    asyncio.run(main())f"AWS FinOps Tools v{__version__}")
-
-
-
-    main_cli()if __name__ == "__main__":        return
+    # Check for version flag
+    if len(sys.argv) > 1 and sys.argv[1] == "--version":
+        print(f"AWS FinOps Tools v{__version__}")
+        return
 
     # Fix for Windows event loop policy
     if platform.system() == 'Windows':

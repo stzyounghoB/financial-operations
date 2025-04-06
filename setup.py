@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="aws-finops-tools",
-    version="0.1.4",
+    version="0.1.5",
     description="AWS 리소스 비용 최적화를 위한 도구",
     author="YoungHo Cha",
     packages=find_packages(),
