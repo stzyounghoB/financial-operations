@@ -363,8 +363,6 @@ class DynamoCUHandler(ServiceInterface[DynamoCUInfo]):
                 min_value = min((point['Sum'] for point in all_datapoints), default=0) / period
                 max_value = max((point['Sum'] for point in all_datapoints), default=0) / period
             
-            
-            print(f"  → 결과: avg={avg_value:.2f}, min={min_value:.2f}, max={max_value:.2f}")
             return avg_value, min_value, max_value
             
         except Exception as e:
