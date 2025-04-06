@@ -68,5 +68,9 @@ finops
 
 
 
+https://github.com/user-attachments/assets/f17a5936-5b5d-458d-a3cf-81c3dcd22906
+
+
+
 
 
