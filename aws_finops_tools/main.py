@@ -4,13 +4,31 @@ import platform
 import sys
 from .menu import Menu
 
-# 버전 정보 추가
-__version__ = "0.1.5"  # Current version
+# 런타임에 버전 정보 가져오기
+def get_version():
+    try:
+        # Python 3.8+ 방식
+        from importlib.metadata import version
+        return version("aws_finops_tools")
+    except ImportError:
+        # 이전 Python 버전 방식
+        import pkg_resources
+        return pkg_resources.get_distribution("aws_finops_tools").version
+    except Exception:
+        # 개발 환경일 경우 git describe 명령어로 직접 가져오기
+        try:
+            import subprocess
+            return subprocess.check_output(["git", "describe", "--tags"]).decode().strip()
+        except:
+            return "개발 버전"
+
+# 버전 출력 부분 수정
+VERSION = get_version()
 
 async def main() -> None:
     """Main program"""
     # Show version information
-    print(f"AWS FinOps Tools v{__version__}")
+    print(f"AWS FinOps Tools v{VERSION}")
     
     # Create menu and get user selections
     menu = Menu()
@@ -28,7 +46,7 @@ def main_cli():
     """CLI entry point"""
     # Check for version flag
     if len(sys.argv) > 1 and sys.argv[1] == "--version":
-        print(f"AWS FinOps Tools v{__version__}")
+        print(f"AWS FinOps Tools v{VERSION}")
         return
 
     # Fix for Windows event loop policy
