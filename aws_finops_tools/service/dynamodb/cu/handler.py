@@ -1,9 +1,8 @@
 import asyncio
 import datetime
 from typing import List, Dict, Any, Optional, Union, TypedDict, Tuple
-import aioboto3
 from ....interfaces.service_interface import ServiceInterface
-
+from ....utils.aws_utils import get_aws_client
 
 class DynamoCUInfo(TypedDict):
     """DynamoDB table CU information type definition"""
@@ -28,7 +27,6 @@ class DynamoCUInfo(TypedDict):
     period_months: int
     region: str
 
-
 class DynamoCUHandler(ServiceInterface[DynamoCUInfo]):
     """Handler for DynamoDB CU operations"""
     
@@ -46,9 +44,9 @@ class DynamoCUHandler(ServiceInterface[DynamoCUInfo]):
     
     async def fetch_data(self) -> List[DynamoCUInfo]:
         """Fetch DynamoDB table CU information asynchronously"""
-        # Create DynamoDB client
-        async with aioboto3.Session(**self.session_args).client('dynamodb', region_name=self.region) as dynamodb:
-            try:
+        try:
+            # DynamoDB 클라이언트로 테이블 목록 가져오기
+            async with get_aws_client('dynamodb', self.region, self.session_args) as dynamodb:
                 # Fetch all DynamoDB table list
                 response = await dynamodb.list_tables()
                 table_names = response.get('TableNames', [])
@@ -65,52 +63,53 @@ class DynamoCUHandler(ServiceInterface[DynamoCUInfo]):
                     return []
                 
                 # Fetch detailed information and CloudWatch metrics for each table
-                tasks = [self.get_table_cu_info(table_name, dynamodb) for table_name in table_names]
+                tasks = [self.get_table_cu_info(table_name) for table_name in table_names]
                 
                 return await asyncio.gather(*tasks)
                 
-            except Exception as e:
-                print(f"Failed to fetch DynamoDB tables: {e}")
-                return []
+        except Exception as e:
+            print(f"Failed to fetch DynamoDB tables: {e}")
+            return []
     
-    async def get_table_cu_info(self, table_name: str, dynamodb: Any) -> DynamoCUInfo:
+    async def get_table_cu_info(self, table_name: str) -> DynamoCUInfo:
         """
         Fetch individual DynamoDB table CU information
         
         Args:
             table_name: DynamoDB table name
-            dynamodb: DynamoDB client
             
         Returns:
             DynamoCUInfo: Table CU information
         """
         try:
-            # Fetch table details
-            table_info = await dynamodb.describe_table(TableName=table_name)
-            table = table_info.get('Table', {})
+            # 테이블 세부 정보 가져오기
+            async with get_aws_client('dynamodb', self.region, self.session_args) as dynamodb:
+                # Fetch table details
+                table_info = await dynamodb.describe_table(TableName=table_name)
+                table = table_info.get('Table', {})
+                
+                # Check billing mode
+                billing_mode = table.get('BillingModeSummary', {}).get('BillingMode', 'PROVISIONED')
+                
+                # Initialize default values
+                provisioned_wcu_avg = 0
+                provisioned_wcu_min = 0
+                provisioned_wcu_max = 0
+                provisioned_rcu_avg = 0
+                provisioned_rcu_min = 0
+                provisioned_rcu_max = 0
+                
+                # Get initial provisioned values from table description as fallback
+                if billing_mode == 'PROVISIONED':
+                    provisioning_info = table.get('ProvisionedThroughput', {})
+                    default_provisioned_wcu = float(provisioning_info.get('WriteCapacityUnits', 0))
+                    default_provisioned_rcu = float(provisioning_info.get('ReadCapacityUnits', 0))
+                else:
+                    default_provisioned_wcu = 0
+                    default_provisioned_rcu = 0
             
-            # Check billing mode
-            billing_mode = table.get('BillingModeSummary', {}).get('BillingMode', 'PROVISIONED')
-            
-            # Initialize default values
-            provisioned_wcu_avg = 0
-            provisioned_wcu_min = 0
-            provisioned_wcu_max = 0
-            provisioned_rcu_avg = 0
-            provisioned_rcu_min = 0
-            provisioned_rcu_max = 0
-            
-            # Get initial provisioned values from table description as fallback
-            if billing_mode == 'PROVISIONED':
-                provisioning_info = table.get('ProvisionedThroughput', {})
-                default_provisioned_wcu = float(provisioning_info.get('WriteCapacityUnits', 0))
-                default_provisioned_rcu = float(provisioning_info.get('ReadCapacityUnits', 0))
-            else:
-                default_provisioned_wcu = 0
-                default_provisioned_rcu = 0
-            
-            # Fetch CloudWatch metrics
-            async with aioboto3.Session(**self.session_args).client('cloudwatch', region_name=self.region) as cloudwatch:
+            # CloudWatch 메트릭 가져오기
+            async with get_aws_client('cloudwatch', self.region, self.session_args) as cloudwatch:
                 # Setup query time
                 end_time = datetime.datetime.now()
                 # Round end_time up to the nearest 5-minute mark
