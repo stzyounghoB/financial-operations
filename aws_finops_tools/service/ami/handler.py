@@ -1,8 +1,7 @@
 from typing import List, Dict, Any, Optional, Union, TypedDict
 import asyncio
-import aioboto3
-import random
 from ...interfaces.service_interface import ServiceInterface
+from ...utils.aws_utils import get_aws_client
 
 
 class AMIInfo(TypedDict):
@@ -33,9 +32,9 @@ class AMIHandler(ServiceInterface[AMIInfo]):
     
     async def fetch_data(self) -> List[AMIInfo]:
         """Fetch AMI data asynchronously with usage information"""
-        async with aioboto3.Session(**self.session_args).client("ec2", region_name=self.region) as ec2, \
-                 aioboto3.Session(**self.session_args).client("autoscaling", region_name=self.region) as autoscaling:
-            try:
+        try:
+            # EC2 클라이언트로 AMI 정보 가져오기
+            async with get_aws_client("ec2", self.region, self.session_args) as ec2:
                 response = await ec2.describe_images(Owners=["self"])
                 images = response.get("Images", [])
                 
@@ -70,7 +69,9 @@ class AMIHandler(ServiceInterface[AMIInfo]):
                                 ami_to_launch_templates[img_id].append(f"{lt_name} (v{v.get('VersionNumber')})")
                 except Exception as e:
                     print(f"Error checking launch templates: {e}")
-                
+            
+            # AutoScaling 정보 가져오기
+            async with get_aws_client("autoscaling", self.region, self.session_args) as autoscaling:
                 # Fetch launch configurations and ASGs
                 ami_to_asg_resources = {}
                 try:
@@ -100,68 +101,79 @@ class AMIHandler(ServiceInterface[AMIInfo]):
                                     if ami_id not in ami_to_asg_resources:
                                         ami_to_asg_resources[ami_id] = []
                                     ami_to_asg_resources[ami_id].append(f"ASG {asg_name} via LC {lc_name}")
-                        
-                        # Process AMIs used via launch templates in ASGs
-                        if lt_id and lt_version:
-                            lt_details = await ec2.describe_launch_template_versions(
-                                LaunchTemplateId=lt_id,
-                                Versions=[lt_version]
-                            )
-                            for version in lt_details.get("LaunchTemplateVersions", []):
-                                ami_id = version.get("LaunchTemplateData", {}).get("ImageId")
-                                if ami_id:
-                                    if ami_id not in ami_to_asg_resources:
-                                        ami_to_asg_resources[ami_id] = []
-                                    ami_to_asg_resources[ami_id].append(f"ASG {asg_name} via LT {lt_id} (v{lt_version})")
                 except Exception as e:
                     print(f"Error checking autoscaling resources: {e}")
+            
+            # 최종 결과 정리
+            async with get_aws_client("ec2", self.region, self.session_args) as ec2:
+                # Process AMIs used via launch templates in ASGs
+                for asg in asg_response.get("AutoScalingGroups", []):
+                    lt = asg.get("LaunchTemplate")
+                    if lt:
+                        lt_id = lt.get("LaunchTemplateId")
+                        lt_version = lt.get("Version")
+                        if lt_id and lt_version:
+                            asg_name = asg.get("AutoScalingGroupName")
+                            try:
+                                lt_details = await ec2.describe_launch_template_versions(
+                                    LaunchTemplateId=lt_id,
+                                    Versions=[lt_version]
+                                )
+                                for version in lt_details.get("LaunchTemplateVersions", []):
+                                    ami_id = version.get("LaunchTemplateData", {}).get("ImageId")
+                                    if ami_id:
+                                        if ami_id not in ami_to_asg_resources:
+                                            ami_to_asg_resources[ami_id] = []
+                                        ami_to_asg_resources[ami_id].append(f"ASG {asg_name} via LT {lt_id} (v{lt_version})")
+                            except Exception as e:
+                                print(f"Error checking launch template in ASG: {e}")
+            
+            # Process all AMIs with usage information
+            result = []
+            for img in images:
+                img_id = img["ImageId"]
+                usage_details = []
                 
-                # Process all AMIs with usage information
-                result = []
-                for img in images:
-                    img_id = img["ImageId"]
-                    usage_details = []
-                    
-                    # Check EC2 instances
-                    if img_id in ami_to_instances:
-                        instances = ami_to_instances[img_id]
-                        usage_details.append(f"EC2 instances: {', '.join(instances[:3])}" + 
-                                            (f" and {len(instances)-3} more" if len(instances) > 3 else ""))
-                    
-                    # Check launch templates
-                    if img_id in ami_to_launch_templates:
-                        templates = ami_to_launch_templates[img_id]
-                        usage_details.append(f"Launch templates: {', '.join(templates[:3])}" + 
-                                            (f" and {len(templates)-3} more" if len(templates) > 3 else ""))
-                    
-                    # Check ASG resources
-                    if img_id in ami_to_asg_resources:
-                        asgs = ami_to_asg_resources[img_id]
-                        usage_details.append(f"ASG resources: {', '.join(asgs[:3])}" + 
-                                            (f" and {len(asgs)-3} more" if len(asgs) > 3 else ""))
-                    
-                    # Set usage string
-                    usage = "; ".join(usage_details) if usage_details else "Unused"
-                    
-                    result.append({
-                        "id": img_id,
-                        "name": img.get("Name", "No name"),
-                        "state": img.get("State", "unknown"),
-                        "public": img.get("Public", False),
-                        "created": img.get("CreationDate", ""),
-                        "region": self.region,
-                        "usage": usage
-                    })
+                # Check EC2 instances
+                if img_id in ami_to_instances:
+                    instances = ami_to_instances[img_id]
+                    usage_details.append(f"EC2 instances: {', '.join(instances[:3])}" + 
+                                        (f" and {len(instances)-3} more" if len(instances) > 3 else ""))
                 
-                return result
-            except Exception as e:
-                print(f"Failed to fetch AMIs: {e}")
-                return []
+                # Check launch templates
+                if img_id in ami_to_launch_templates:
+                    templates = ami_to_launch_templates[img_id]
+                    usage_details.append(f"Launch templates: {', '.join(templates[:3])}" + 
+                                        (f" and {len(templates)-3} more" if len(templates) > 3 else ""))
+                
+                # Check ASG resources
+                if img_id in ami_to_asg_resources:
+                    asgs = ami_to_asg_resources[img_id]
+                    usage_details.append(f"ASG resources: {', '.join(asgs[:3])}" + 
+                                        (f" and {len(asgs)-3} more" if len(asgs) > 3 else ""))
+                
+                # Set usage string
+                usage = "; ".join(usage_details) if usage_details else "Unused"
+                
+                result.append({
+                    "id": img_id,
+                    "name": img.get("Name", "No name"),
+                    "state": img.get("State", "unknown"),
+                    "public": img.get("Public", False),
+                    "created": img.get("CreationDate", ""),
+                    "region": self.region,
+                    "usage": usage
+                })
+            
+            return result
+        except Exception as e:
+            print(f"Failed to fetch AMIs: {e}")
+            return []
     
     async def fetch_unused_amis(self) -> List[UnusedAMIInfo]:
         """Fetch unused AMI data asynchronously, including Auto Scaling references"""
-        async with aioboto3.Session(**self.session_args).client("ec2", region_name=self.region) as ec2, \
-                aioboto3.Session(**self.session_args).client("autoscaling", region_name=self.region) as autoscaling:
+        async with get_aws_client("ec2", self.region, self.session_args) as ec2, \
+                get_aws_client("autoscaling", self.region, self.session_args) as autoscaling:
             try:
                 # Fetch all AMIs
                 ami_response = await ec2.describe_images(Owners=["self"])
@@ -234,7 +246,7 @@ class AMIHandler(ServiceInterface[AMIInfo]):
         Returns:
             Dict[str, Any]: Deletion result
         """
-        async with aioboto3.Session(**self.session_args).client("ec2", region_name=self.region) as ec2:
+        async with get_aws_client("ec2", self.region, self.session_args) as ec2:
             try:
                 # Fetch AMI information
                 ami_response = await ec2.describe_images(ImageIds=[ami_id])
