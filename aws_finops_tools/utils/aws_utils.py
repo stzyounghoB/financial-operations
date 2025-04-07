@@ -90,5 +90,3 @@ async def cleanup_resources():
     
     # aiohttp 세션이 완전히 닫힐 시간 주기
     await asyncio.sleep(0.5)
-    
-    print("모든 AWS 리소스가 정리되었습니다.")
