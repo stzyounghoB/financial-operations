@@ -10,7 +10,7 @@ tsv/
 all/
 *.egg-info
 *venv
-
+*_version*
 
 
 dist/build/_version.py_version
